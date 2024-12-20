@@ -99,7 +99,7 @@ metadata:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
   rules:
-  - host: anur.wordpress.com
+  - host: anur.aboutdevops.my.id
     http:
       paths:
       - path: /
