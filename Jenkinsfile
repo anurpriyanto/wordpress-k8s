@@ -4,9 +4,9 @@ pipeline {
     environment {
         // Define environment variables
         KUBECONFIG = credentials('kubeconfig-credentials')
-        GIT_REPO = 'your-git-repo-url'
+        GIT_REPO = 'git@github.com:anurpriyanto/wordpress-k8s.git'
         BRANCH = 'main'
-        KUBE_NAMESPACE = 'wordpress'
+        KUBE_NAMESPACE = 'default'
     }
     
     stages {
@@ -26,7 +26,7 @@ pipeline {
                     // Validate Kubernetes YAML files
                     sh '''
                         for file in $(find . -name "*.yaml"); do
-                            kubectl --kubeconfig=$KUBECONFIG apply --dry-run=client -f $file
+                            kubectl apply --dry-run=client -f $file
                         done
                     '''
                 }
@@ -37,8 +37,8 @@ pipeline {
             steps {
                 script {
                     sh """
-                        kubectl --kubeconfig=$KUBECONFIG get namespace ${KUBE_NAMESPACE} || \
-                        kubectl --kubeconfig=$KUBECONFIG create namespace ${KUBE_NAMESPACE}
+                        kubectl get namespace ${KUBE_NAMESPACE} || \
+                        kubectl create namespace ${KUBE_NAMESPACE}
                     """
                 }
             }
