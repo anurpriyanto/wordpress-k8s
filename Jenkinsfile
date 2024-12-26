@@ -14,8 +14,7 @@ pipeline {
                 script {
                     // Deploy to Kubernetes using kubectl
                     sh '''
-                        kubectl create namespace $KUBERNETES_NAMESPACE
-                        kubectl apply -f deployment.yaml -n $KUBERNETES_NAMESPACE
+		    	kubectl apply -f deployment.yaml -n $KUBERNETES_NAMESPACE
                     '''
                 }
             }
