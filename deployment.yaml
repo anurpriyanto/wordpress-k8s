@@ -1,131 +1,136 @@
----
+# mysql-secret.yaml
 apiVersion: v1
-kind: PersistentVolumeClaim
+kind: Secret
 metadata:
-  name: mysql-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
+  name: mysql-secret
+type: Opaque
+data:
+  # Password: wordpress123 (base64 encoded)
+  MYSQL_ROOT_PASSWORD: d29yZHByZXNzMTIz
+  MYSQL_PASSWORD: d29yZHByZXNzMTIz
+
 ---
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: wordpress-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
----
+# mysql-deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mysql
+  name: wordpress-mysql
+  labels:
+    app: wordpress
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: mysql
-  template:
-    metadata:
-      labels:
-        app: mysql
-    spec:
-      containers:
-        - name: mysql
-          image: mysql:5.7
-          env:
-            - name: MYSQL_ROOT_PASSWORD
-              value: "rootpassword"
-            - name: MYSQL_DATABASE
-              value: "wordpress"
-            - name: MYSQL_USER
-              value: "wordpress"
-            - name: MYSQL_PASSWORD
-              value: "wordpresspassword"
-          ports:
-            - containerPort: 3306
-          resources:
-            requests:
-              memory: "512Mi"
-              cpu: "500m"
-            limits:
-              memory: "512Mi"
-              cpu: "500m"
-          volumeMounts:
-            - name: mysql-persistent-storage
-              mountPath: /var/lib/mysql
-      volumes:
-        - name: mysql-persistent-storage
-          persistentVolumeClaim:
-            claimName: mysql-pvc
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: wordpress
-spec:
-  replicas: 1
   selector:
     matchLabels:
       app: wordpress
+      tier: mysql
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:
         app: wordpress
+        tier: mysql
     spec:
       containers:
-        - name: wordpress
-          image: wordpress:latest
-          env:
-            - name: WORDPRESS_DB_HOST
-              value: mysql.dedi-waordpress.svc.cluster.local:3306
-            - name: WORDPRESS_DB_NAME
-              value: "wordpress"
-            - name: WORDPRESS_DB_USER
-              value: "wordpress"
-            - name: WORDPRESS_DB_PASSWORD
-              value: "wordpresspassword"
-          ports:
-            - containerPort: 80
-          resources:
-            requests:
-              memory: "512Mi"
-              cpu: "500m"
-            limits:
-              memory: "512Mi"
-              cpu: "500m"
-          volumeMounts:
-            - name: wordpress-persistent-storage
-              mountPath: /var/www/html
+      - image: mysql:5.7
+        name: mysql
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_ROOT_PASSWORD
+        - name: MYSQL_DATABASE
+          value: wordpress
+        - name: MYSQL_USER
+          value: wordpress
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_PASSWORD
+        ports:
+        - containerPort: 3306
+          name: mysql
+        volumeMounts:
+        - name: mysql-persistent-storage
+          mountPath: /var/lib/mysql
       volumes:
-        - name: wordpress-persistent-storage
-          persistentVolumeClaim:
-            claimName: wordpress-pvc
+      - name: mysql-persistent-storage
+        emptyDir: {}
+
 ---
+# mysql-service.yaml
 apiVersion: v1
 kind: Service
 metadata:
-  name: mysql
+  name: wordpress-mysql
+  labels:
+    app: wordpress
 spec:
   ports:
     - port: 3306
   selector:
-    app: mysql
+    app: wordpress
+    tier: mysql
   clusterIP: None
+
 ---
+# wordpress-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wordpress
+  labels:
+    app: wordpress
+spec:
+  selector:
+    matchLabels:
+      app: wordpress
+      tier: frontend
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: wordpress
+        tier: frontend
+    spec:
+      containers:
+      - image: wordpress:latest
+        name: wordpress
+        env:
+        - name: WORDPRESS_DB_HOST
+          value: wordpress-mysql
+        - name: WORDPRESS_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_PASSWORD
+        - name: WORDPRESS_DB_USER
+          value: wordpress
+        ports:
+        - containerPort: 80
+          name: wordpress
+        volumeMounts:
+        - name: wordpress-persistent-storage
+          mountPath: /var/www/html
+      volumes:
+      - name: wordpress-persistent-storage
+        emptyDir: {}
+
+---
+# wordpress-service.yaml
 apiVersion: v1
 kind: Service
 metadata:
   name: wordpress
+  labels:
+    app: wordpress
 spec:
   ports:
-    - port: 8005
+    - port: 7001
       targetPort: 80
   selector:
     app: wordpress
+    tier: frontend
   type: LoadBalancer
